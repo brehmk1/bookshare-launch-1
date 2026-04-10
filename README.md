@@ -2,7 +2,7 @@
 
 This repository now contains:
 - Workstream 1: the real BookShare website built with Next.js, TypeScript, and Supabase integration points
-- Workstream 2A: the first desktop companion scaffold for local file discovery and future backend linking
+- Workstream 2A/2B: the desktop companion with local file discovery plus live backend file registration and availability updates
 
 ## Product Direction
 
@@ -29,17 +29,19 @@ Implemented in this phase:
 - desktop companion scaffold in `apps/desktop`
 - local folder selection and supported writing-file discovery
 - local file metadata and SHA-256 fingerprinting
-- mockable work-linking adapter for future backend integration
+- desktop sign-in using the existing BookShare auth model
+- live authored-work lookup in the desktop app
+- desktop client registration in `desktop_clients`
+- live file registration in `work_files`
+- live availability status updates for linked files
 - phase-2 schema hooks for `desktop_clients` and `work_files`
 
 Not implemented in this phase:
-- real desktop auth
-- real backend file registration
-- real heartbeat availability sync
 - peer-to-peer transfer
 - manuscript upload or storage
 - payments
 - full admin curation console
+- background heartbeat scheduling
 
 ## Required Environment Variables
 
@@ -104,9 +106,10 @@ npm run desktop:build
 ```
 
 Notes:
-- `npm run desktop:dev` runs the desktop frontend scaffold through Vite for local development.
+- `npm run desktop:dev` runs the desktop frontend through Vite for local development.
 - The repo also includes a Tauri shell scaffold in `apps/desktop/src-tauri`.
 - Running the actual Tauri desktop window requires Rust, Cargo, and Windows desktop prerequisites to be installed.
+- Create `apps/desktop/.env.local` using the env format in `apps/desktop/.env.example`.
 
 ## Vercel Deployment
 
@@ -129,22 +132,25 @@ Requirements:
 
 The desktop app is scaffolded for local development first.
 
-Real in Workstream 2A:
+Real in Workstream 2B:
 - desktop frontend workspace
+- BookShare sign-in with email/password
+- desktop client registration in Supabase
+- authored-work lookup from Supabase
+- `work_files` registration
+- live availability updates
 - local folder selection
 - supported file scanning
 - file metadata extraction
 - SHA-256 fingerprint generation
-- local presence states
+- desktop presence status derived from backend registration
 - Tauri project structure
 - Supabase schema extension points
 
-Scaffolded in Workstream 2A:
-- auth service
-- BookShare work lookup adapter
-- file registration adapter
-- desktop client heartbeat
-- availability registration
+Still scaffolded after Workstream 2B:
+- long-running heartbeat scheduling
+- transfer session creation
+- sender and receiver handshake flows
 - all transfer logic
 
 To run the full Tauri shell later, the intended command is:
@@ -157,7 +163,7 @@ That command is not verified in this pass because Rust/Cargo is not installed on
 
 ## Recommended Next Steps
 
-1. Connect the desktop scaffold to the live BookShare backend for real file registration and availability state.
+1. Add heartbeat scheduling and presence refresh for registered desktop clients.
 2. Add richer profile editing and curation tooling.
 3. Install the Rust/Tauri toolchain so the desktop shell can be launched directly.
 4. Add the transfer layer after desktop client registration and presence are in place.
@@ -179,12 +185,14 @@ That command is not verified in this pass because Rust/Cargo is not installed on
 
 1. Run `npm run desktop:dev`.
 2. Open the local URL shown by Vite.
-3. Enter an email and role in the desktop auth panel and connect the local scaffold session.
+3. Sign in with an existing BookShare account email and password.
 4. Click `Select local library folder`.
 5. Choose a folder containing supported writing files such as `.txt`, `.md`, `.docx`, `.pdf`, or `.epub`.
 6. Confirm the app lists discovered files and computes metadata plus SHA-256 fingerprints.
 7. Select a file and confirm the metadata panel updates.
-8. Link the file to a mock BookShare work record and confirm the local status changes to linked or ready later.
+8. Confirm authored works load from the live backend.
+9. Link the file to a real BookShare work record and confirm registration succeeds.
+10. Mark the linked file as available later and confirm the status updates.
 
 ## Codex Guidance
 
@@ -194,4 +202,4 @@ This repo now includes:
 
 The next task should be:
 
-`Workstream 2B: connect desktop scaffold to the live BookShare backend for real file registration and availability status`
+`Workstream 2C: add desktop heartbeat scheduling and stronger backend sync around registered files and device presence`

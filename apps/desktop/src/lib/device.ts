@@ -1,5 +1,8 @@
 function normalizePlatform() {
-  const platform = navigator.userAgentData?.platform || navigator.platform || "unknown";
+  const platform =
+    (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ||
+    navigator.platform ||
+    "unknown";
   return platform.toLowerCase().includes("win") ? "windows" : platform.toLowerCase();
 }
 

@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getDesktopEnv } from "./lib/env";
 import { formatBytes, formatDateTime } from "./lib/format";
-import { createDesktopAuthService } from "./services/desktop-auth-service";
-import { createDesktopBackendAdapter } from "./services/desktop-linking-service";
+import { createDesktopBackendService } from "./services/desktop-backend-service";
 import { createDesktopFileService } from "./services/desktop-file-service";
-import { createDesktopPresenceService } from "./services/desktop-presence-service";
 import type { DesktopPresenceState, DesktopSession, LocalFileRecord, WorkSummary } from "./types";
 
-const authService = createDesktopAuthService();
+const backendService = createDesktopBackendService();
 const fileService = createDesktopFileService();
-const backendAdapter = createDesktopBackendAdapter();
-const presenceService = createDesktopPresenceService();
+const desktopEnv = getDesktopEnv();
 
 const phaseLabels = {
   available_later: "Available for transfer later",
@@ -25,24 +23,33 @@ export function App() {
   const [files, setFiles] = useState<LocalFileRecord[]>([]);
   const [works, setWorks] = useState<WorkSummary[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState("Desktop scaffold ready.");
+  const [statusMessage, setStatusMessage] = useState("Desktop backend ready.");
   const [isScanning, setIsScanning] = useState(false);
   const [authDraft, setAuthDraft] = useState({
     email: "",
-    role: "author" as "author" | "reader",
+    password: "",
   });
 
   useEffect(() => {
     void (async () => {
-      const [nextSession, nextPresence, nextWorks] = await Promise.all([
-        authService.getSession(),
-        presenceService.getState(),
-        backendAdapter.listWorks(),
-      ]);
+      try {
+        const [nextSession, nextPresence, nextWorks] = await Promise.all([
+          backendService.getSession(),
+          backendService.getPresence(),
+          backendService.listWorks(),
+        ]);
 
-      setSession(nextSession);
-      setPresence(nextPresence);
-      setWorks(nextWorks);
+        setSession(nextSession);
+        setPresence(nextPresence);
+        setWorks(nextWorks);
+        setStatusMessage(
+          nextSession.userId
+            ? "Restored BookShare desktop session and loaded live backend data."
+            : "Sign in with your existing BookShare account to register desktop files.",
+        );
+      } catch (error) {
+        setStatusMessage(error instanceof Error ? error.message : "Unable to initialize the desktop backend.");
+      }
     })();
   }, []);
 
@@ -53,23 +60,49 @@ export function App() {
 
   async function handleConnect(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setStatusMessage("Connecting to BookShare...");
 
-    const nextSession = await authService.connect({
-      email: authDraft.email,
-      notes: "Local session only. Replace with real Supabase auth in Workstream 2B.",
-      role: authDraft.role,
-    });
+    try {
+      const snapshot = await backendService.connect({
+        email: authDraft.email,
+        password: authDraft.password,
+      });
 
-    setSession(nextSession);
-    setPresence(await presenceService.setStatus("connected", "Desktop scaffold connected locally."));
-    setStatusMessage("Desktop auth scaffold connected locally.");
+      setSession(snapshot.session);
+      setPresence({
+        client: snapshot.client,
+        detail: snapshot.client
+          ? `Desktop client ${snapshot.client.deviceName} registered successfully.`
+          : "Desktop client registration is pending.",
+        status: "connected",
+      });
+      setWorks(snapshot.works);
+      setStatusMessage(
+        snapshot.session.role === "reader"
+          ? "Signed in as a reader. Desktop registration is live, but file linking remains author-focused."
+          : snapshot.works.length
+            ? "Signed in successfully and loaded your authored BookShare works."
+            : "Signed in successfully. No authored works were found yet in the backend.",
+      );
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Unable to sign in to BookShare.");
+    }
   }
 
   async function handleDisconnect() {
-    const nextSession = await authService.disconnect();
-    setSession(nextSession);
-    setPresence(await presenceService.setStatus("not_connected", "Desktop scaffold disconnected."));
-    setStatusMessage("Desktop auth scaffold disconnected.");
+    try {
+      const nextSession = await backendService.disconnect();
+      setSession(nextSession);
+      setPresence({
+        client: null,
+        detail: "Desktop session disconnected and client set offline.",
+        status: "not_connected",
+      });
+      setWorks([]);
+      setStatusMessage("Desktop session disconnected.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Unable to disconnect cleanly.");
+    }
   }
 
   async function handleFolderSelection(event: React.ChangeEvent<HTMLInputElement>) {
@@ -86,17 +119,16 @@ export function App() {
       const records = await fileService.scan(nextFiles);
       setFiles(records);
       setSelectedFileId(records[0]?.id ?? null);
-      setPresence(
-        await presenceService.setStatus(
-          "connected",
-          records.length
-            ? `Scanned ${records.length} supported file(s).`
-            : "No supported writing files were found in the selected folder.",
-        ),
-      );
+      setPresence((current) => ({
+        client: current?.client ?? null,
+        detail: records.length
+          ? `Scanned ${records.length} supported file(s).`
+          : "No supported writing files were found in the selected folder.",
+        status: current?.client ? "connected" : "not_connected",
+      }));
       setStatusMessage(
         records.length
-          ? `Discovered ${records.length} supported file(s) ready for linking.`
+          ? `Discovered ${records.length} supported file(s) ready for backend linking.`
           : "No supported writing files were found. Supported types include txt, md, docx, pdf, and epub.",
       );
     } finally {
@@ -114,28 +146,44 @@ export function App() {
       return;
     }
 
-    const result = await backendAdapter.registerLinkedFile({
-      fileFingerprint: file.fingerprint,
-      localFileName: file.relativePath,
-      mimeType: file.mimeType,
-      size: file.size,
-      workId: work.id,
-    });
+    if (!presence?.client?.id) {
+      setStatusMessage("Sign in and register the desktop client before linking files.");
+      return;
+    }
 
-    const nextFiles: LocalFileRecord[] = files.map((item) =>
-      item.id === fileId
-        ? {
-            ...item,
-            availabilityStatus: "linked" as const,
-            linkedWorkId: work.id,
-            linkedWorkTitle: work.title,
-          }
-        : item,
-    );
+    try {
+      const result = await backendService.registerLinkedFile({
+        availabilityStatus: "linked",
+        desktopClientId: presence.client.id,
+        fileFingerprint: file.fingerprint,
+        lastSeenAt: new Date().toISOString(),
+        localFileName: file.relativePath,
+        mimeType: file.mimeType,
+        size: file.size,
+        workId: work.id,
+      });
 
-    setFiles(nextFiles);
-    setPresence(await presenceService.setStatus("file_linked", result.detail));
-    setStatusMessage(result.detail);
+      const nextFiles: LocalFileRecord[] = files.map((item) =>
+        item.id === fileId
+          ? {
+              ...item,
+              availabilityStatus: "linked" as const,
+              linkedWorkId: work.id,
+              linkedWorkTitle: work.title,
+            }
+          : item,
+      );
+
+      setFiles(nextFiles);
+      setPresence({
+        client: presence.client,
+        detail: result.detail,
+        status: "file_linked",
+      });
+      setStatusMessage(result.detail);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Unable to register the selected file.");
+    }
   }
 
   async function handleMarkAvailableLater() {
@@ -143,23 +191,43 @@ export function App() {
       return;
     }
 
-    const nextFiles: LocalFileRecord[] = files.map((file) =>
-      file.id === selectedFile.id
-        ? {
-            ...file,
-            availabilityStatus: "ready_later" as const,
-          }
-        : file,
-    );
+    if (!presence?.client?.id) {
+      setStatusMessage("Sign in and register the desktop client before updating availability.");
+      return;
+    }
 
-    setFiles(nextFiles);
-    setPresence(
-      await presenceService.setStatus(
-        "available_later",
-        `${selectedFile.relativePath} is marked as ready for future transfer workflow integration.`,
-      ),
-    );
-    setStatusMessage("Selected file marked as available for future transfer flow.");
+    if (!selectedFile.linkedWorkId) {
+      setStatusMessage("Link the file to a BookShare work before marking it available.");
+      return;
+    }
+
+    try {
+      const detail = await backendService.setAvailability({
+        availabilityStatus: "ready_later",
+        desktopClientId: presence.client.id,
+        fileFingerprint: selectedFile.fingerprint,
+        lastSeenAt: new Date().toISOString(),
+      });
+
+      const nextFiles: LocalFileRecord[] = files.map((file) =>
+        file.id === selectedFile.id
+          ? {
+              ...file,
+              availabilityStatus: "ready_later" as const,
+            }
+          : file,
+      );
+
+      setFiles(nextFiles);
+      setPresence({
+        client: presence.client,
+        detail: detail.detail,
+        status: "available_later",
+      });
+      setStatusMessage(detail.detail);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Unable to update availability.");
+    }
   }
 
   return (
@@ -167,19 +235,23 @@ export function App() {
       <aside className="desktop-sidebar">
         <div>
           <div className="desktop-brand">BookShare Desktop</div>
-          <p className="desktop-subtitle">Local-only companion scaffold for authors and readers.</p>
+          <p className="desktop-subtitle">Local-first file registration for the live BookShare backend.</p>
         </div>
 
         <div className="status-card">
           <span className="status-label">Phase</span>
           <strong>{presence ? phaseLabels[presence.status] : "Loading"}</strong>
-          <p>{presence?.detail ?? "Loading presence scaffold..."}</p>
+          <p>{presence?.detail ?? "Loading desktop presence..."}</p>
         </div>
 
         <div className="status-card">
           <span className="status-label">Backend mode</span>
-          <strong>{import.meta.env.VITE_BOOKSHARE_BACKEND_MODE ?? "mock"}</strong>
-          <p>Workstream 2A uses a mockable adapter. Real backend file registration arrives in Workstream 2B.</p>
+          <strong>{desktopEnv.backendMode}</strong>
+          <p>
+            {desktopEnv.configured
+              ? "Desktop backend env vars are configured for live Supabase access."
+              : "Desktop Supabase env vars are missing. Add them before attempting sign-in."}
+          </p>
         </div>
       </aside>
 
@@ -187,10 +259,10 @@ export function App() {
         <section className="panel hero-panel">
           <div>
             <span className="eyebrow">Desktop companion</span>
-            <h1>Keep manuscript files on the local machine while BookShare stays metadata-first.</h1>
+            <h1>Register local writing files without moving manuscript storage into the platform.</h1>
             <p>
-              This scaffold handles folder selection, supported file discovery, fingerprints, local metadata, and
-              link-ready status. It does not transfer files yet.
+              This phase connects the desktop scaffold to BookShare for sign-in, desktop client presence, authored-work
+              lookup, file registration, and availability status updates.
             </p>
           </div>
           <div className="hero-actions">
@@ -198,7 +270,7 @@ export function App() {
               Select local library folder
             </button>
             <button className="secondary-button" onClick={handleDisconnect} type="button">
-              Reset local session
+              Sign out desktop
             </button>
           </div>
           <input
@@ -215,8 +287,8 @@ export function App() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <span className="status-label">Auth scaffold</span>
-                <h2>Desktop auth status</h2>
+                <span className="status-label">Desktop sign-in</span>
+                <h2>BookShare account</h2>
               </div>
             </div>
 
@@ -231,28 +303,22 @@ export function App() {
                 />
               </label>
               <label>
-                Intended role
-                <select
-                  value={authDraft.role}
-                  onChange={(event) =>
-                    setAuthDraft((current) => ({
-                      ...current,
-                      role: event.target.value as "author" | "reader",
-                    }))
-                  }
-                >
-                  <option value="author">Author</option>
-                  <option value="reader">Reader</option>
-                </select>
+                Password
+                <input
+                  placeholder="Use your existing BookShare password"
+                  type="password"
+                  value={authDraft.password}
+                  onChange={(event) => setAuthDraft((current) => ({ ...current, password: event.target.value }))}
+                />
               </label>
               <button className="primary-button" type="submit">
-                Connect local scaffold session
+                Sign in to BookShare
               </button>
             </form>
 
             <div className="subtle-panel">
-              <strong>{session?.authMode === "connected" ? "Connected locally" : "Placeholder only"}</strong>
-              <p>{session?.notes ?? "Loading auth scaffold..."}</p>
+              <strong>{session?.authMode === "connected" ? "Connected to BookShare" : "Awaiting sign-in"}</strong>
+              <p>{session?.notes ?? "Loading desktop session..."}</p>
               <p>{session?.email ? `Session email: ${session.email}` : "No account email linked yet."}</p>
             </div>
           </section>
@@ -260,8 +326,8 @@ export function App() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <span className="status-label">File library</span>
-                <h2>Discovered local files</h2>
+                <span className="status-label">Local library</span>
+                <h2>Discovered writing files</h2>
               </div>
               <span className="stat-pill">{files.length} file(s)</span>
             </div>
@@ -282,7 +348,7 @@ export function App() {
                     <div>
                       <strong>{file.relativePath}</strong>
                       <span>
-                        {formatBytes(file.size)} • {file.extension || "unknown"}
+                        {formatBytes(file.size)} | {file.extension || "unknown"}
                       </span>
                     </div>
                     <span className="status-badge">{file.availabilityStatus}</span>
@@ -343,15 +409,15 @@ export function App() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <span className="status-label">BookShare link</span>
-                <h2>Associate local file to work</h2>
+                <span className="status-label">Live backend link</span>
+                <h2>Associate local file to BookShare work</h2>
               </div>
             </div>
 
             {selectedFile ? (
               <div className="desktop-form">
                 <label>
-                  Existing BookShare work
+                  Existing authored work
                   <select
                     value={selectedFile.linkedWorkId ?? ""}
                     onChange={(event) => void handleLinkWork(event, selectedFile.id)}
@@ -359,21 +425,21 @@ export function App() {
                     <option value="">Choose a work record</option>
                     {works.map((work) => (
                       <option key={work.id} value={work.id}>
-                        {work.title} • {work.genre}
+                        {work.title} - {work.genre}
                       </option>
                     ))}
                   </select>
                 </label>
 
                 <button className="secondary-button" onClick={() => void handleMarkAvailableLater()} type="button">
-                  Mark as available for future transfer
+                  Mark as available for transfer later
                 </button>
 
                 <div className="subtle-panel">
                   <strong>Integration note</strong>
                   <p>
-                    This uses a mock backend adapter in Workstream 2A. Workstream 2B should swap in real Supabase-backed
-                    work lookup, client registration, file registration, and availability updates.
+                    This now uses the live BookShare backend for desktop client registration, authored-work lookup,
+                    `work_files` upserts, and availability updates. File transfer is still intentionally not implemented.
                   </p>
                 </div>
               </div>

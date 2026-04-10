@@ -1,27 +1,28 @@
 # BookShare Desktop
 
-This is the Workstream 2A desktop companion scaffold for BookShare.
+This is the BookShare desktop companion for Workstream 2B.
 
 ## What is implemented
 
 - Tauri workspace structure
 - TypeScript desktop frontend
-- local scaffold auth panel
+- live Supabase-backed desktop sign-in using existing BookShare accounts
 - local folder selection via directory input
 - supported writing-file discovery
 - file metadata display
 - SHA-256 fingerprint generation in the frontend
-- mockable adapter for linking local files to BookShare works
-- local presence and availability status scaffolding
+- live authored-work lookup from the BookShare backend
+- desktop client registration in `desktop_clients`
+- file registration in `work_files`
+- live availability status updates for linked files
 
 ## What is not implemented yet
 
-- real Supabase desktop auth
-- real backend file registration
-- real desktop client heartbeat
 - peer-to-peer transfer
 - WebRTC
 - sending or receiving manuscript files
+- background heartbeat scheduling
+- reader-side file receipt workflows
 
 ## Local run steps
 
@@ -38,6 +39,16 @@ Build the desktop frontend:
 npm run desktop:build
 ```
 
+Required desktop env file:
+
+```bash
+VITE_BOOKSHARE_BACKEND_MODE=supabase
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+Use an existing BookShare account created through the web app. Desktop account creation is still expected to happen on the website.
+
 ## Tauri shell notes
 
 The repo includes a Tauri shell scaffold in `src-tauri`, but launching the actual desktop window requires:
@@ -53,9 +64,8 @@ When those are installed, the intended command is:
 npm --prefix apps/desktop run tauri:dev
 ```
 
-Workstream 2B should connect this scaffold to the live BookShare backend for:
+Workstream 2C or later can extend this with:
 
-- real auth
-- `desktop_clients` registration
-- `work_files` registration
-- availability heartbeat updates
+- heartbeat scheduling
+- transfer-session preparation
+- sender and receiver coordination
