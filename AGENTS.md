@@ -12,7 +12,8 @@ The platform should not centrally store full manuscript files by default. Store 
 - This repository now contains the first real BookShare web app built with Next.js and TypeScript.
 - The deployed marketing page started at `https://bookshare-launch.vercel.app/`, and the homepage styling in this repo preserves that BookShare look.
 - The web app covers auth, dashboard, work listings, browsing, work detail pages, requests, and featured works support.
-- This repo is still web-only in the current phase. Desktop companion and transfer work remain future workstreams.
+- This repo now also includes the first desktop companion scaffold in `apps/desktop`.
+- Real desktop backend sync and transfer work remain future workstreams.
 
 ## Target Architecture
 - Web app: Next.js, TypeScript, Supabase, Vercel
@@ -53,10 +54,11 @@ The platform should not centrally store full manuscript files by default. Store 
 - Provide a fallback path for author-controlled external links if direct transfer is unavailable.
 
 ## Repo Layout
+- `apps/desktop/`: Tauri desktop companion scaffold with TypeScript frontend and Rust shell stub
 - `app/`: Next.js App Router pages, layouts, and global styling
 - `components/`: reusable UI components and forms
 - `lib/`: Supabase clients, server actions, auth helpers, validation, and queries
-- `supabase/migrations/`: SQL migrations for the BookShare web phase
+- `supabase/migrations/`: SQL migrations for the web phase and desktop scaffold support
 - `types/`: shared database and application types
 - `public/`: static assets
 
@@ -70,7 +72,9 @@ If this repo later becomes a monorepo, keep the structure explicit. A preferred 
 ## Run, Build, and Lint
 - Install: `npm install`
 - Dev server: `npm run dev`
+- Desktop dev server: `npm run desktop:dev`
 - Production build: `npm run build`
+- Desktop build: `npm run desktop:build`
 - Lint: `npm run lint`
 - Type check: `npm run typecheck`
 

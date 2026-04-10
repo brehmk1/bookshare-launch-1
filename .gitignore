@@ -12,6 +12,9 @@ dist
 dist-ssr
 .next
 .vercel
+target
+apps/desktop/dist
+apps/desktop/src-tauri/target
 *.local
 .env
 .env.*.local

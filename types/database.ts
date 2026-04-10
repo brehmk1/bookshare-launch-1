@@ -8,6 +8,36 @@ export type RequestStatus = "pending" | "approved" | "denied";
 export interface Database {
   public: {
     Tables: {
+      desktop_clients: {
+        Row: {
+          created_at: string;
+          device_name: string;
+          id: string;
+          last_heartbeat_at: string | null;
+          online_status: "offline" | "online";
+          platform: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          device_name: string;
+          id?: string;
+          last_heartbeat_at?: string | null;
+          online_status?: "offline" | "online";
+          platform: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          device_name?: string;
+          id?: string;
+          last_heartbeat_at?: string | null;
+          online_status?: "offline" | "online";
+          platform?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       featured_slots: {
         Row: {
           curator_notes: string | null;
@@ -165,6 +195,60 @@ export interface Database {
         };
         Relationships: [];
       };
+      work_files: {
+        Row: {
+          availability_status: "unlinked" | "linked" | "ready_later";
+          created_at: string;
+          desktop_client_id: string;
+          file_fingerprint: string;
+          file_size: number;
+          id: string;
+          last_seen_at: string | null;
+          local_file_name: string;
+          mime_type: string;
+          work_id: string;
+        };
+        Insert: {
+          availability_status?: "unlinked" | "linked" | "ready_later";
+          created_at?: string;
+          desktop_client_id: string;
+          file_fingerprint: string;
+          file_size: number;
+          id?: string;
+          last_seen_at?: string | null;
+          local_file_name: string;
+          mime_type: string;
+          work_id: string;
+        };
+        Update: {
+          availability_status?: "unlinked" | "linked" | "ready_later";
+          created_at?: string;
+          desktop_client_id?: string;
+          file_fingerprint?: string;
+          file_size?: number;
+          id?: string;
+          last_seen_at?: string | null;
+          local_file_name?: string;
+          mime_type?: string;
+          work_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_files_desktop_client_id_fkey";
+            columns: ["desktop_client_id"];
+            isOneToOne: false;
+            referencedRelation: "desktop_clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_files_work_id_fkey";
+            columns: ["work_id"];
+            isOneToOne: false;
+            referencedRelation: "works";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -177,3 +261,5 @@ export type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 export type WorkRow = Database["public"]["Tables"]["works"]["Row"];
 export type RequestRow = Database["public"]["Tables"]["requests"]["Row"];
 export type FeaturedSlotRow = Database["public"]["Tables"]["featured_slots"]["Row"];
+export type DesktopClientRow = Database["public"]["Tables"]["desktop_clients"]["Row"];
+export type WorkFileRow = Database["public"]["Tables"]["work_files"]["Row"];

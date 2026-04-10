@@ -1,6 +1,8 @@
-# BookShare Web App
+# BookShare Platform
 
-This repository now contains Workstream 1 of BookShare: the real website built with Next.js, TypeScript, and Supabase integration points while preserving the existing BookShare launch-page branding.
+This repository now contains:
+- Workstream 1: the real BookShare website built with Next.js, TypeScript, and Supabase integration points
+- Workstream 2A: the first desktop companion scaffold for local file discovery and future backend linking
 
 ## Product Direction
 
@@ -8,7 +10,7 @@ BookShare is intended to become a two-part system:
 - a public web app for marketing, discovery, metadata, excerpts, requests, and featured works
 - a desktop companion app for local manuscript ownership, availability tracking, and direct author-to-reader transfer
 
-The platform should not centrally store full manuscript files by default. This phase stores metadata and excerpt text only.
+The platform should not centrally store full manuscript files by default. The web app stores metadata and excerpt text only, while the desktop scaffold keeps actual files on the local machine.
 
 ## Current Status
 
@@ -24,9 +26,16 @@ Implemented in this phase:
 - approve and deny requests
 - featured works page
 - SQL migration for the core BookShare web schema
+- desktop companion scaffold in `apps/desktop`
+- local folder selection and supported writing-file discovery
+- local file metadata and SHA-256 fingerprinting
+- mockable work-linking adapter for future backend integration
+- phase-2 schema hooks for `desktop_clients` and `work_files`
 
 Not implemented in this phase:
-- desktop companion app
+- real desktop auth
+- real backend file registration
+- real heartbeat availability sync
 - peer-to-peer transfer
 - manuscript upload or storage
 - payments
@@ -52,7 +61,10 @@ The app uses the public anon key together with Supabase Auth sessions and Row Le
 npm install
 ```
 
-2. Apply the SQL in [`supabase/migrations/20260410_000001_bookshare_web_phase.sql`](C:\Users\Kevin%20Brehm\Desktop\bookshare-launch\supabase\migrations\20260410_000001_bookshare_web_phase.sql) to your Supabase project.
+2. Apply the SQL in both migration files to your Supabase project:
+
+- [`supabase/migrations/20260410_000001_bookshare_web_phase.sql`](C:\Users\Kevin%20Brehm\Desktop\bookshare-launch\supabase\migrations\20260410_000001_bookshare_web_phase.sql)
+- [`supabase/migrations/20260410_000002_bookshare_desktop_scaffold.sql`](C:\Users\Kevin%20Brehm\Desktop\bookshare-launch\supabase\migrations\20260410_000002_bookshare_desktop_scaffold.sql)
 
 Recommended option:
 - Open the Supabase SQL Editor for your project.
@@ -82,6 +94,20 @@ npm run typecheck
 npm run build
 ```
 
+Desktop scaffold:
+
+```bash
+npm install
+npm run desktop:dev
+npm run desktop:typecheck
+npm run desktop:build
+```
+
+Notes:
+- `npm run desktop:dev` runs the desktop frontend scaffold through Vite for local development.
+- The repo also includes a Tauri shell scaffold in `apps/desktop/src-tauri`.
+- Running the actual Tauri desktop window requires Rust, Cargo, and Windows desktop prerequisites to be installed.
+
 ## Vercel Deployment
 
 1. Import the repo into Vercel as a Next.js project.
@@ -99,11 +125,41 @@ No `vercel.json` file is required for this phase.
 Requirements:
 - Node.js 20+ recommended
 
+## Desktop Local Notes
+
+The desktop app is scaffolded for local development first.
+
+Real in Workstream 2A:
+- desktop frontend workspace
+- local folder selection
+- supported file scanning
+- file metadata extraction
+- SHA-256 fingerprint generation
+- local presence states
+- Tauri project structure
+- Supabase schema extension points
+
+Scaffolded in Workstream 2A:
+- auth service
+- BookShare work lookup adapter
+- file registration adapter
+- desktop client heartbeat
+- availability registration
+- all transfer logic
+
+To run the full Tauri shell later, the intended command is:
+
+```bash
+npm --prefix apps/desktop run tauri:dev
+```
+
+That command is not verified in this pass because Rust/Cargo is not installed on this machine yet.
+
 ## Recommended Next Steps
 
-1. Point the app at the live Supabase project and test the full auth and request workflow end to end.
+1. Connect the desktop scaffold to the live BookShare backend for real file registration and availability state.
 2. Add richer profile editing and curation tooling.
-3. Build the Tauri desktop companion after the web metadata flow is working.
+3. Install the Rust/Tauri toolchain so the desktop shell can be launched directly.
 4. Add the transfer layer after desktop client registration and presence are in place.
 
 ## Manual Verification Flow
@@ -119,10 +175,23 @@ Requirements:
 9. Return to the author session, open `/requests`, and approve or deny the request with an optional response message.
 10. Return to the reader session and confirm the request status and response are visible in `/requests`.
 
+## Desktop Scaffold Verification
+
+1. Run `npm run desktop:dev`.
+2. Open the local URL shown by Vite.
+3. Enter an email and role in the desktop auth panel and connect the local scaffold session.
+4. Click `Select local library folder`.
+5. Choose a folder containing supported writing files such as `.txt`, `.md`, `.docx`, `.pdf`, or `.epub`.
+6. Confirm the app lists discovered files and computes metadata plus SHA-256 fingerprints.
+7. Select a file and confirm the metadata panel updates.
+8. Link the file to a mock BookShare work record and confirm the local status changes to linked or ready later.
+
 ## Codex Guidance
 
 This repo now includes:
 - `AGENTS.md` for repo-level build rules and definition of done
 - `docs/codex-build-brief.md` for the BookShare architecture and workstream brief
 
-If you use Codex on this project next, keep the focus on web hardening and Supabase wiring until the website flow is stable.
+The next task should be:
+
+`Workstream 2B: connect desktop scaffold to the live BookShare backend for real file registration and availability status`
